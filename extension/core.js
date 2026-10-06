@@ -1,4 +1,27 @@
 export const MODES = ["include-query", "ignore-query"];
+export const HISTORY_LIMIT = 5;
+
+export function historyKey(windowId) {
+  return `history:${windowId}`;
+}
+
+async function saveRecord(api, windowId, record) {
+  await api.storage.session.set({ [historyKey(windowId)]: record });
+}
+
+async function readRecord(api, windowId) {
+  const key = historyKey(windowId);
+  const data = await api.storage.session.get(key);
+  const record = data[key] || { history: [] };
+  if (record.pending) {
+    const openIds = new Set((await api.tabs.query({})).map(tab => tab.id));
+    const tabs = record.pending.tabs.filter(tab => !openIds.has(tab.originalId));
+    if (tabs.length) record.history = [{ ...record.pending, tabs }, ...record.history].slice(0, HISTORY_LIMIT);
+    delete record.pending;
+    await saveRecord(api, windowId, record);
+  }
+  return record;
+}
 
 export function tabUrl(tab) {
   return tab.pendingUrl || tab.url || "";
@@ -38,15 +61,32 @@ export function planDedup(tabs, mode) {
 
 export async function getState(api, windowId) {
   const tabs = await api.tabs.query({ windowId });
+  const record = await readRecord(api, windowId);
   return {
     total: tabs.length,
     counts: Object.fromEntries(MODES.map(mode => [mode, planDedup(tabs, mode).length])),
+    history: record.history.map(snapshot => ({
+      createdAt: snapshot.createdAt, mode: snapshot.mode, count: snapshot.tabs.length,
+    })),
   };
 }
 
 export async function deduplicate(api, windowId, mode) {
+  const record = await readRecord(api, windowId);
   const tabs = await api.tabs.query({ windowId });
   const plan = planDedup(tabs, mode);
+  const snapshot = {
+    createdAt: Date.now(), mode,
+    tabs: plan.map(({ tab }) => ({ originalId: tab.id, url: tabUrl(tab), index: tab.index, pinned: tab.pinned })),
+  };
+  if (plan.length) {
+    try {
+      await saveRecord(api, windowId, { ...record, pending: snapshot });
+    } catch {
+      throw new Error("復元用のスナップショットを保存できなかったため、タブは削除していません。");
+    }
+  }
+  const removedIds = new Set();
   let removed = 0;
   let skipped = 0;
   let failed = 0;
@@ -68,9 +108,50 @@ export async function deduplicate(api, windowId, mode) {
     try {
       await api.tabs.remove(current.id);
       removed++;
+      removedIds.add(current.id);
     } catch {
       failed++;
     }
   }
+  if (plan.length) {
+    const closed = snapshot.tabs.filter(tab => removedIds.has(tab.originalId));
+    if (closed.length) record.history = [{ ...snapshot, tabs: closed }, ...record.history].slice(0, HISTORY_LIMIT);
+    try {
+      await saveRecord(api, windowId, record);
+    } catch {
+      return { removed, skipped, failed, storageError: "履歴の確定に失敗しました。保存済みスナップショットは残っています。メニューを開き直して履歴を確認してください。" };
+    }
+  }
   return { removed, skipped, failed };
+}
+
+export async function restoreLatest(api, windowId) {
+  const record = await readRecord(api, windowId);
+  const snapshot = record.history[0];
+  let restored = 0;
+  let failed = 0;
+  let skipped = 0;
+  if (!snapshot) return { restored, failed, skipped };
+  const openIds = new Set((await api.tabs.query({})).map(tab => tab.id));
+  for (const saved of [...snapshot.tabs].sort((a, b) => a.index - b.index)) {
+    if (openIds.has(saved.originalId)) {
+      skipped++;
+    } else {
+      try {
+        await api.tabs.create({ windowId, url: saved.url, index: saved.index, pinned: saved.pinned, active: false });
+        restored++;
+      } catch {
+        failed++;
+        continue;
+      }
+    }
+    snapshot.tabs = snapshot.tabs.filter(tab => tab.originalId !== saved.originalId);
+    if (!snapshot.tabs.length) record.history.shift();
+    try {
+      await saveRecord(api, windowId, record);
+    } catch {
+      return { restored, failed, skipped, storageError: "復元履歴の更新に失敗しました。追加済みのタブを確認してから再実行してください。" };
+    }
+  }
+  return { restored, failed, skipped };
 }

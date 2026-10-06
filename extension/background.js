@@ -1,4 +1,4 @@
-import { deduplicate, getState, MODES } from "./core.js";
+import { deduplicate, getState, historyKey, MODES, restoreLatest } from "./core.js";
 
 let queue = Promise.resolve();
 
@@ -16,6 +16,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (message.type === "dedup" && MODES.includes(message.mode)) {
       return deduplicate(chrome, window.id, message.mode);
     }
+    if (message.type === "restore") return restoreLatest(chrome, window.id);
     throw new Error("この操作には対応していません。");
   };
   const result = queue.then(task);
@@ -23,4 +24,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   result.then(data => sendResponse({ ok: true, data }),
     error => sendResponse({ ok: false, error: error.message }));
   return true;
+});
+
+chrome.windows.onRemoved.addListener(windowId => {
+  const result = queue.then(() => chrome.storage.session.remove(historyKey(windowId)));
+  queue = result.catch(error => console.error("閉じたウィンドウの履歴を削除できませんでした。", error));
 });
