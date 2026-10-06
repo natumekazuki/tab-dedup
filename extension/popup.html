@@ -17,19 +17,15 @@
       <section aria-label="URLの判定方式">
         <button type="button" class="dedup" data-mode="include-query" disabled>
           <span class="button-line"><span>クエリを含めて削除</span><span class="count" id="include-count">—</span></span>
-          <span class="button-help">クエリの名前・値は区別し、並び順は無視</span>
         </button>
         <button type="button" class="dedup" data-mode="ignore-query" disabled>
           <span class="button-line"><span>クエリを無視して削除</span><span class="count" id="ignore-count">—</span></span>
-          <span class="button-help">? 以降が違っても同じURLとして扱う</span>
         </button>
-        <p class="note">同じURLは1タブだけ残します。入力中の内容は失われる場合があります。</p>
       </section>
       <section class="recovery" aria-labelledby="recovery-title">
         <div class="section-heading"><h2 id="recovery-title">削除を取り消す</h2><span id="history-count" class="muted">— / 5回分</span></div>
         <button type="button" id="restore" disabled>直前の削除を戻す</button>
         <p id="history-info" class="muted">復元履歴を確認中…</p>
-        <p class="note">URL・位置・固定状態を復元します。フォーム入力は戻りません。履歴はウィンドウを閉じる、Chromeを再起動する、拡張を再読み込みするまでです。</p>
       </section>
       <p id="status" role="status" aria-live="polite" hidden></p>
     </main>

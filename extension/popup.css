@@ -20,10 +20,8 @@ button { font: inherit; cursor: pointer; }
 .dedup:hover:not(:disabled) { border-color: #2463a6; background: #eef5ff; }
 .button-line { display: flex; gap: 8px; justify-content: space-between; align-items: center; font-weight: 650; }
 .count { white-space: nowrap; color: #2463a6; }
-.button-help { display: block; margin-top: 5px; color: #52657b; font-size: 11px; line-height: 1.5; }
 button:focus-visible { outline: 3px solid #2463a6; outline-offset: 3px; }
 button:disabled { cursor: default; opacity: .6; }
-.note { margin: 12px 0 0; color: #52657b; font-size: 11px; line-height: 1.7; }
 .recovery { margin-top: 18px; padding-top: 16px; border-top: 1px solid #b7c6d8; }
 .section-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
 h2 { margin: 0; font-size: 13px; }
@@ -36,7 +34,7 @@ h2 { margin: 0; font-size: 13px; }
 [hidden] { display: none !important; }
 @media (prefers-color-scheme: dark) {
   :root { color: #e5edf6; background: #17212e; }
-  .muted, .eyebrow, .button-help, .note { color: #b3c2d4; }
+  .muted, .eyebrow { color: #b3c2d4; }
   .dedup { background: #202e3f; border-color: #596d84; }
   .dedup:hover:not(:disabled) { border-color: #a0c7ff; background: #2a3e57; }
   .count { color: #a0c7ff; }
