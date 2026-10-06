@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>重複タブを整理</title>
+    <link rel="stylesheet" href="popup.css">
+    <script type="module" src="popup.js"></script>
+  </head>
+  <body>
+    <main>
+      <header>
+        <p class="eyebrow">TAB DEDUP</p>
+        <h1>重複タブを整理</h1>
+        <p id="window-info" class="muted">このウィンドウを確認中…</p>
+      </header>
+      <section aria-label="URLの判定方式">
+        <button type="button" class="dedup" data-mode="include-query" disabled>
+          <span class="button-line"><span>クエリを含めて削除</span><span class="count" id="include-count">—</span></span>
+          <span class="button-help">? 以降も同じURLだけをまとめる</span>
+        </button>
+        <button type="button" class="dedup" data-mode="ignore-query" disabled>
+          <span class="button-line"><span>クエリを無視して削除</span><span class="count" id="ignore-count">—</span></span>
+          <span class="button-help">? 以降が違っても同じURLとして扱う</span>
+        </button>
+        <p class="note">同じURLは1タブだけ残します。入力中の内容は失われる場合があります。</p>
+      </section>
+      <p id="status" role="status" aria-live="polite" hidden></p>
+    </main>
+  </body>
+</html>

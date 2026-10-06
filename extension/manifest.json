@@ -1,0 +1,16 @@
+{
+  "manifest_version": 3,
+  "name": "Tab Dedup",
+  "version": "0.1.0",
+  "description": "現在のウィンドウの重複タブを、クエリを含む・無視するURL判定で整理します。",
+  "permissions": ["tabs"],
+  "action": {
+    "default_title": "重複タブを整理",
+    "default_popup": "popup.html"
+  },
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "incognito": "not_allowed"
+}
