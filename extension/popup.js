@@ -3,6 +3,7 @@ let busy = true;
 let state;
 const buttons = [...document.querySelectorAll("button[data-mode]")];
 const restoreButton = document.querySelector("#restore");
+const historyInfo = document.querySelector("#history-info");
 const status = document.querySelector("#status");
 
 async function request(type, extra = {}) {
@@ -24,7 +25,8 @@ function render() {
   if (!state) {
     if (!busy) {
       document.querySelector("#window-info").textContent = "タブと履歴を取得できませんでした";
-      document.querySelector("#history-info").textContent = "復元履歴を取得できませんでした";
+      historyInfo.hidden = false;
+      historyInfo.textContent = "復元履歴を取得できませんでした";
       document.querySelector("#history-count").textContent = "— / 5回分";
       document.querySelector("#include-count").textContent = "—";
       document.querySelector("#ignore-count").textContent = "—";
@@ -37,9 +39,10 @@ function render() {
   document.querySelector("#history-count").textContent = `${state.history.length} / 5回分`;
   const latest = state.history[0];
   restoreButton.textContent = latest ? `直前の削除を戻す · ${latest.count}タブ` : "直前の削除を戻す";
-  document.querySelector("#history-info").textContent = latest
+  historyInfo.hidden = !latest;
+  historyInfo.textContent = latest
     ? `${new Date(latest.createdAt).toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" })} · ${latest.mode === "include-query" ? "クエリ込み" : "クエリ無視"}の削除`
-    : "復元できる履歴はありません";
+    : "";
 }
 
 async function refresh() {
