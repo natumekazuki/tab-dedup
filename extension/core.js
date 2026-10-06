@@ -33,6 +33,7 @@ export function urlKey(value, mode) {
   try {
     const url = new URL(value);
     if (mode === "ignore-query") url.search = "";
+    else if (url.search) url.search = url.search.slice(1).split("&").sort().join("&");
     return url.href;
   } catch {
     return null;

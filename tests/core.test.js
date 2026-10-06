@@ -49,10 +49,49 @@ function fakeApi(initial) {
   };
 }
 
-test("クエリ込みはパラメータが違うタブを残し、完全に同じURLだけをまとめる", () => {
+test("クエリ込みは値が異なるタブを残す", () => {
   const tabs = [tab(1, "https://example.com/?id=1"), tab(2, "https://example.com/?id=2"),
     tab(3, "https://example.com/?id=1")];
   assert.deepEqual(planDedup(tabs, "include-query").map(item => item.tab.id), [3]);
+});
+
+test("クエリ込みはパラメータ順を無視し、名前・値・重複数・fragmentは区別する", () => {
+  const url = "https://example.com/?b=2&a=1#one";
+  const tabs = [tab(1, url), tab(2, "https://example.com/?a=1&b=2#one"),
+    tab(3, "https://example.com/?a=1&b=3#one"), tab(4, "https://example.com/?a=1&c=2#one"),
+    tab(5, "https://example.com/?a=1&a=1&b=2#one"), tab(6, "https://example.com/?a=1&b=2#two")];
+  const original = structuredClone(tabs);
+  assert.equal(urlKey(url, "include-query"), "https://example.com/?a=1&b=2#one");
+  assert.deepEqual(planDedup(tabs, "include-query").map(item => [item.tab.id, item.keeperId]), [[2, 1]]);
+  assert.deepEqual(tabs, original);
+});
+
+test("クエリ込みは同名パラメータも順不同にし、値のエンコード表記は維持する", () => {
+  const url = "https://example.com/?a=2&a=1&q=x%26y%3Dz&space=hello%20world";
+  assert.equal(urlKey(url, "include-query"),
+    urlKey("https://example.com/?space=hello%20world&q=x%26y%3Dz&a=1&a=2", "include-query"));
+  for (const different of [
+    "https://example.com/?a=1&a=1&q=x%26y%3Dz&space=hello%20world",
+    "https://example.com/?a=1&q=x%26y%3Dz&space=hello%20world",
+    "https://example.com/?a=1&a=2&q=x%26y%3Dz&space=hello+world",
+    "https://example.com/?a=1&a=2&q=x&y=z&space=hello%20world",
+  ]) {
+    assert.notEqual(urlKey(url, "include-query"), urlKey(different, "include-query"));
+  }
+});
+
+test("並び順だけ違うクエリを削除・復元しても元のURLを保存する", async () => {
+  const keeperUrl = "https://example.com/?a=1&b=2";
+  const duplicateUrl = "https://example.com/?b=2&a=1";
+  const api = fakeApi([tab(1, keeperUrl, { active: true }), tab(2, duplicateUrl)]);
+  assert.equal((await getState(api, 1)).counts["include-query"], 1);
+  assert.deepEqual(await deduplicate(api, 1, "include-query"), { removed: 1, skipped: 0, failed: 0 });
+  assert.deepEqual(api.removed, [2]);
+  const record = (await api.storage.session.get(historyKey(1)))[historyKey(1)];
+  assert.equal(record.history[0].tabs[0].url, duplicateUrl);
+  assert.equal((await api.tabs.get(1)).url, keeperUrl);
+  assert.deepEqual(await restoreLatest(api, 1), { restored: 1, failed: 0, skipped: 0 });
+  assert.deepEqual(api.created, [{ windowId: 1, url: duplicateUrl, index: 1, pinned: false, active: false }]);
 });
 
 test("クエリ無視はsearchだけを除外し、fragment・path・originを区別する", () => {
