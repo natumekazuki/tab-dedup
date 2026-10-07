@@ -252,6 +252,57 @@ test("全タブの削除が失敗した場合は既存の復元履歴を保持�
   assert.deepEqual((await api.storage.session.get(historyKey(1)))[historyKey(1)], before);
 });
 
+test("削除0件の履歴確定と再保存が失敗しても、後日の手動閉鎖で5回分の履歴を消費しない", async () => {
+  const url = "https://example.com/";
+  const api = fakeApi([tab(1, url), tab(2, url)]);
+  const before = { history: Array.from({ length: 5 }, (_, i) => ({
+    createdAt: 5 - i, mode: "include-query",
+    tabs: [{ originalId: 100 + i, url: `https://example.com/old${i}`, index: 1, pinned: false }],
+  })) };
+  await api.storage.session.set({ [historyKey(1)]: before });
+  const set = api.storage.session.set;
+  let writes = 0;
+  api.storage.session.set = async value => {
+    if ([2, 3].includes(++writes)) throw new Error("Write failed");
+    await set(value);
+  };
+  const remove = api.tabs.remove;
+  api.tabs.remove = async () => { throw new Error("Cannot edit"); };
+  const result = await deduplicate(api, 1, "include-query");
+  assert.deepEqual({ removed: result.removed, failed: result.failed, skipped: result.skipped },
+    { removed: 0, failed: 1, skipped: 0 });
+  assert.ok(result.storageError);
+  await remove(2);
+  await assert.rejects(getState(api, 1), /Write failed/);
+  assert.equal((await getState(api, 1)).history.length, 5);
+  assert.deepEqual((await api.storage.session.get(historyKey(1)))[historyKey(1)], before);
+});
+
+test("履歴確定に失敗した部分削除は捨て、手動閉鎖後も既存5回分だけを復元する", async () => {
+  const url = "https://example.com/";
+  const api = fakeApi([tab(1, url, { active: true }), tab(2, url), tab(3, url)]);
+  const before = { history: Array.from({ length: 5 }, (_, i) => ({
+    createdAt: 5 - i, mode: "include-query",
+    tabs: [{ originalId: 100 + i, url: `https://example.com/old${i}`, index: 1, pinned: false }],
+  })) };
+  await api.storage.session.set({ [historyKey(1)]: before });
+  const set = api.storage.session.set;
+  let writes = 0;
+  api.storage.session.set = async value => { if (++writes === 2) throw new Error("Write failed"); await set(value); };
+  const remove = api.tabs.remove;
+  api.tabs.remove = async id => { if (id === 2) throw new Error("Cannot edit"); await remove(id); };
+  const result = await deduplicate(api, 1, "include-query");
+  assert.deepEqual({ removed: result.removed, failed: result.failed, skipped: result.skipped },
+    { removed: 1, failed: 1, skipped: 0 });
+  assert.ok(result.storageError);
+  await remove(2);
+  assert.equal((await getState(api, 1)).history.length, 5);
+  const record = (await api.storage.session.get(historyKey(1)))[historyKey(1)];
+  assert.deepEqual(record, before);
+  assert.deepEqual(await restoreLatest(api, 1), { restored: 1, failed: 0, skipped: 0 });
+  assert.deepEqual(api.created, [{ windowId: 1, url: "https://example.com/old0", index: 1, pinned: false, active: false }]);
+});
+
 test("一部の復元が失敗しても成功済みタブは再追加せず、失敗分だけ再試行する", async () => {
   const url = "https://example.com/";
   const api = fakeApi([tab(1, url), tab(2, url), tab(3, url)]);
@@ -266,7 +317,7 @@ test("一部の復元が失敗しても成功済みタブは再追加せず、�
   assert.equal((await getState(api, 1)).history.length, 0);
 });
 
-test("削除後の履歴確定が失敗しても保存済みスナップショットから閉じたタブを回収する", async () => {
+test("削除後の履歴確定に失敗した操作は復元対象に含めない", async () => {
   const url = "https://example.com/";
   const api = fakeApi([tab(1, url), tab(2, url)]);
   const set = api.storage.session.set;
@@ -274,14 +325,16 @@ test("削除後の履歴確定が失敗しても保存済みスナップショ�
   api.storage.session.set = async value => { if (++writes === 2) throw new Error("Write failed"); await set(value); };
   const result = await deduplicate(api, 1, "include-query");
   assert.equal(result.removed, 1);
-  assert.match(result.storageError, /スナップショットは残っています/);
-  assert.equal((await getState(api, 1)).history[0].count, 1);
+  assert.equal(result.storageError, "削除履歴の保存に失敗しました。");
+  assert.deepEqual((await getState(api, 1)).history, []);
   const record = (await api.storage.session.get(historyKey(1)))[historyKey(1)];
-  assert.equal(record.pending, undefined);
-  assert.equal((await restoreLatest(api, 1)).restored, 1);
+  assert.deepEqual(record, { history: [] });
+  assert.deepEqual(await restoreLatest(api, 1), { restored: 0, failed: 0, skipped: 0 });
+  assert.deepEqual(api.created, []);
+  assert.equal((await api.tabs.query({ windowId: 1 })).length, 1);
 });
 
-test("未確定スナップショットを回収するとき、まだ開いている・別ウィンドウへ移ったタブは含めない", async () => {
+test("保存済みの未確定スナップショットはタブの有無や移動先によらず破棄する", async () => {
   const url = "https://example.com/";
   const api = fakeApi([tab(1, url), tab(2, url, { windowId: 2 })]);
   await api.storage.session.set({ [historyKey(1)]: {
@@ -291,9 +344,12 @@ test("未確定スナップショットを回収するとき、まだ開いて�
       { originalId: 3, url, index: 2, pinned: false },
     ] },
   } });
-  assert.equal((await getState(api, 1)).history[0].count, 1);
-  assert.equal((await restoreLatest(api, 1)).restored, 1);
-  assert.equal(api.created.length, 1);
+  assert.deepEqual((await getState(api, 1)).history, []);
+  assert.deepEqual((await api.storage.session.get(historyKey(1)))[historyKey(1)], { history: [] });
+  assert.deepEqual(await restoreLatest(api, 1), { restored: 0, failed: 0, skipped: 0 });
+  assert.deepEqual(api.created, []);
+  assert.equal((await api.tabs.get(1)).windowId, 1);
+  assert.equal((await api.tabs.get(2)).windowId, 2);
 });
 
 test("復元後の保存が失敗したら追加済み件数と警告を返し、残りのタブは追加しない", async () => {

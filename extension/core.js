@@ -14,9 +14,6 @@ async function readRecord(api, windowId) {
   const data = await api.storage.session.get(key);
   const record = data[key] || { history: [] };
   if (record.pending) {
-    const openIds = new Set((await api.tabs.query({})).map(tab => tab.id));
-    const tabs = record.pending.tabs.filter(tab => !openIds.has(tab.originalId));
-    if (tabs.length) record.history = [{ ...record.pending, tabs }, ...record.history].slice(0, HISTORY_LIMIT);
     delete record.pending;
     await saveRecord(api, windowId, record);
   }
@@ -120,7 +117,7 @@ export async function deduplicate(api, windowId, mode) {
     try {
       await saveRecord(api, windowId, record);
     } catch {
-      return { removed, skipped, failed, storageError: "履歴の確定に失敗しました。保存済みスナップショットは残っています。メニューを開き直して履歴を確認してください。" };
+      return { removed, skipped, failed, storageError: "削除履歴の保存に失敗しました。" };
     }
   }
   return { removed, skipped, failed };
