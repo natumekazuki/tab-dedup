@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Tab Dedup",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "minimum_chrome_version": "102",
   "description": "現在のウィンドウの重複タブを、クエリを含む・無視するURL判定で整理します。",
   "permissions": ["tabs", "storage"],

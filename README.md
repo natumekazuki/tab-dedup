@@ -1,13 +1,13 @@
 # Tab Dedup
 
-操作したウィンドウ内だけの重複タブを整理する、Manifest V3のChrome拡張です。ビルドや外部ライブラリは不要です。
+操作したウィンドウ内だけの重複タブを整理する、Manifest V3のChrome拡張です。拡張のビルドや実行時の外部ライブラリは不要です。
 
 Chrome 102以降に対応します。
 
 ## 読み込みと使い方
 
 1. Chromeで `chrome://extensions/` を開き、デベロッパーモードを有効にします。
-2. 「パッケージ化されていない拡張機能を読み込む」で、このrepositoryの `extension/` を選びます。
+2. [GitHub Releases](https://github.com/natumekazuki/tab-dedup/releases) のZIPを展開し、「パッケージ化されていない拡張機能を読み込む」で展開先を選びます。開発時はこのrepositoryの `extension/` を選びます。
 3. 拡張アイコンをクリックし、「クエリを含めて削除」または「クエリを無視して削除」を選びます。表示件数は閉じる予定のタブ数です。
 
 クエリを含める場合は並び順を無視し、`https://example.com/?a=1&b=2` と `https://example.com/?b=2&a=1` を同じURLとして扱います。`&` で区切られた要素の名前・値・重複数・エンコード表記は区別します。同じ名前のパラメータが複数ある場合も並び順は無視します。開いているタブや復元用に保存するURLの並び順は変更しません。
@@ -28,4 +28,20 @@ Chrome 102以降に対応します。
 
 ## 検証
 
-Node.jsで `npm test` を実行します。実ブラウザー確認はユーザーの既存プロファイルと分離した非表示ブラウザーで行います。
+Node.js 24で `npm ci`、`npm run check`、`npm test` を実行します。`npx playwright install chromium` でブラウザーを準備し、`npm run test:browser` で実拡張を確認します。ブラウザーは既存プロファイルと分離した非表示のPlaywright付属Chromiumです。Chrome 102実機やネイティブのツールバーpopup・支援技術の確認は、このCIとは別に扱います。
+
+`npm run package -- <空の出力ディレクトリ>` は現在のcommitの `extension/` の中身をZIP化し、展開して構成を確認します。`TAB_DEDUP_EXTENSION_PATH` に展開先の `extension/` を指定してブラウザーテストを実行すれば、配布物を検証できます。`TAB_DEDUP_TEST_OUTPUT` でテスト出力先を指定できます。
+
+## 開発・リリース運用
+
+課題・機能要求・後追い残件は [GitHub Issues](https://github.com/natumekazuki/tab-dedup/issues) で管理します。Milestoneによる版別予定管理は行わず、版未指定の課題はバックログとして扱います。通常は作業ブランチから `master` へのPRを作成し、CIの `verify` 成功と差分レビューを確認して統合します。非ブロッカーはIssuesへ引き継ぎ、修正完了と統合・公開を分けます。
+
+正式公開した版の対象ウィンドウ、URL判定、残すタブの優先順位、削除前保存、確定履歴の復元を互換性の維持対象にします。実際に利用中のデータ・契約はタグの有無によらず評価します。UIの配置・説明文・内部実装自体は固定しません。履歴は一時データであり、更新・再起動をまたぐ継続や移行は保証しません。
+
+versionの正本は `extension/manifest.json` です。リリース時に数字3要素の `X.Y.Z` を決め、`package.json` と同時に更新します。修正はpatch、互換性のある機能追加はminor、既存動作と非互換ならmajorを上げます。通常commitでは採番せず、npm公開・RC・配布チャンネルの分離は行いません。
+
+リリースノートは `docs/releases/X.Y.Z.md` に記録し、版の更新と同じPRへ含めます。詳細ドキュメント・ソースへのリンクを記載する場合は完全commit SHAで固定します。対象コードの統合・必要な検証・関連残件の分類/引継ぎ後、`master` に含まれるcommitへ `vX.Y.Z` タグを作成してpushすることを公開操作とします。
+
+Release workflowはタグとversionの一致、単体テスト、構成・配布ZIP、実拡張の削除・復元を確認した後、同じZIPをGitHub Releaseへ公開し、リリースノートを本文に使います。Releaseが公開されZIPを取得できることをもって公開完了とします。通常のPR・mergeだけでは公開しません。公開済みタグ・ZIPは差し替えず、新しい版で修正します。
+
+配布はデベロッパーモード用ZIPで、自動更新やChrome Web Store公開は行いません。
